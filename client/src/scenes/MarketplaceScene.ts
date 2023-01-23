@@ -1,21 +1,14 @@
 import Phaser from 'phaser';
-import { MAIN_SCENE } from './keys';
-import { Item } from './models/item';
-import { Signer } from 'ethers';
+import { getContract } from './contracts';
 
 export class MarketplaceScene extends Phaser.Scene {
     private backButton: Phaser.GameObjects.Image;
     private marketplaceContainer: Phaser.GameObjects.Container;
-    private signer: Signer;
-    private items: Item[] = [];
+    private itemList: Phaser.GameObjects.Text[];
+    private marketplaceContract: any;
 
     constructor() {
         super({ key: 'MarketplaceScene' });
-    }
-
-    init(data: any) {
-        this.signer = data.signer;
-        this.items = data.items;
     }
 
     preload() {
@@ -32,46 +25,56 @@ export class MarketplaceScene extends Phaser.Scene {
         //create marketplace container
         this.marketplaceContainer = this.add.container(400, 300);
 
-        //add marketplace UI elements to container
-        this.createMarketplace();
-    }
+        //initialize the marketplace contract
+        this.marketplaceContract = getContract('Marketplace');
 
-    createMarketplace() {
-        //create marketplace UI elements
-        this.items.forEach((item) => {
-            const itemContainer = this.add.container(0, 0);
-            // create item name text
-            const itemName = this.add.text(0, 0, item.name, { font: '24px Arial' });
-            // create item price text
-            const itemPrice = this.add.text(0, 50, `Price: ${item.price} ETH`, { font: '24px Arial' });
-            // create item image
-            const itemImage = this.add.image(200, 0, item.image);
-            //create buy button
-            const buyButton = this.add.text(200, 150, 'Buy', { font: '24px Arial' });
-            buyButton.setInteractive();
-            buyButton.on('pointerdown', async () => {
-                try {
-                    // interact with smart contract to purchase item
-                    const contract = new this.signer.provider.eth.Contract(item.abi, item.address);
-                    const tx = await contract.functions.purchase(item.id, { value: item.price });
-                    const receipt = await tx.wait();
-                    // add item to player's inventory
-                    // ...
-                } catch (e) {
-                    console.error(e);
-                }
-            });
-            itemContainer.add([itemName, itemPrice, itemImage, buyButton]);
-            this.marketplaceContainer.add(itemContainer);
+        //get the list of items available for purchase
+        this.marketplaceContract.getItemList().then((itemList: string[]) => {
+            this.itemList = [];
+            for (let i = 0; i < itemList.length; i++) {
+                //create a new text object for each item and add it to the marketplace container
+                const itemText = this.add.text(0, i * 20, itemList[i], { color: 'white' });
+                this.itemList.push(itemText);
+                this.marketplaceContainer.add(itemText);
+
+                //set the text object as interactive and add a pointerdown listener to handle purchases
+                itemText.setInteractive();
+                itemText.on('pointerdown', () => {
+                    this.handlePurchase(itemList[i]);
+                });
+            }
         });
     }
 
-    update() {
-        // handle user interactions, updates to marketplace items, etc.
+    handlePurchase(itemName: string) {
+        // code to handle making a purchase of the selected item
+        // this will likely involve calling a smart contract function and passing in the item name or ID as an argument
+        this.marketplaceContract.purchaseItem(itemName, { value: this.getItemPrice(itemName) })
+            .then((transactionReceipt) => {
+                console.log(`Successfully purchased ${itemName}. Transaction receipt:`, transactionReceipt);
+                this.createTransactionConfirmation(transactionReceipt);
+            }).catch((error) => {
+                console.error(`Error purchasing ${itemName}:`, error);
+                this.createTransactionError(error);
+            });
+    }
+
+    getItemPrice(itemName: string) {
+        //code to retrieve the price of the selected item
+        //this will likely involve calling a smart contract function and passing in the item name or ID as an argument
+        return this.marketplaceContract.getItemPrice(itemName);
+    }
+
+    createTransactionConfirmation(transactionReceipt: any) {
+        // code to create a UI element or message to confirm the transaction to the user
+    }
+
+    createTransactionError(error: any) {
+        // code to create a UI element or message to inform the user of the error
     }
 
     transitionToMain() {
-        // transition back to the main scene
-        this.scene.start(MAIN_SCENE);
+        this.scene.start('MainScene');
     }
+
 }
